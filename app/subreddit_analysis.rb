@@ -233,6 +233,7 @@ class SubredditAnalysis
   end
 
   def self.run(subreddit)
+    retry = 0
     begin
       bot = SubredditAnalysis.new('./config/config.yml')
       bot.authorize
@@ -245,9 +246,11 @@ class SubredditAnalysis
     rescue Exception => e
       bot.close if bot
       puts e
-      sleep(1.hour)
-      puts "Try again..."
-      SubredditAnalysis.run(subreddit)
+      if (retry++ =< 2) then
+        sleep(1.hour)
+        puts "Try again...(attempt #{retry+1} of 3)"
+        SubredditAnalysis.run(subreddit)
+      end
     ensure
       bot.close if bot
     end
