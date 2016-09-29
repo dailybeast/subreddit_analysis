@@ -241,6 +241,13 @@ class SubredditAnalysis
       bot.users_other_submissions(subreddit)
       bot.users_other_comments(subreddit)
       bot.analyze(subreddit)
+      puts "done."
+    rescue Exception => e
+      bot.close if bot
+      puts e
+      sleep(1.hour)
+      puts "Try again..."
+      SubredditAnalysis.run(subreddit)
     ensure
       bot.close if bot
     end
