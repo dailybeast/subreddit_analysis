@@ -246,7 +246,7 @@ class SubredditAnalysis
     rescue Exception => e
       bot.close if bot
       puts e
-      if (tries++ =< 2) then
+      if (++tries <= 2) then
         sleep(1.hour)
         puts "Try again...(attempt #{tries+1} of 3)"
         SubredditAnalysis.run(subreddit)
