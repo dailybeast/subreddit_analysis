@@ -5,7 +5,6 @@ require 'yaml'
 require 'json'
 require 'sqlite3'
 require 'csv'
-require 'active_support/core_ext/numeric/time'
 
 class SubredditAnalysis
   attr_accessor :props, :client, :access
@@ -143,7 +142,7 @@ class SubredditAnalysis
       @db.execute "insert or ignore into subreddits (name, metadata) values ('#{data['display_name']}',  '#{JSON.pretty_generate(data).gsub("'", "''")}');"
     when SUBMITTER_TYPE
       @db.execute "insert or ignore into subreddits (name) values ('#{data['name']}');"
-      @db.execute "update subreddits set ended_at=#{data['ended_at']}, after='#{data['after'] || ''}' where name='#{data['name']}';"
+      @db.execute "update subreddits set ended_at=#{data['ended_at']}, after='#{data['after'] || ''}' where name='#{data['name']}' COLLATE NOCASE;"
       for submitter in data['submitters']
         @db.execute "insert or replace into submitters (subreddit_name, name) values ('#{data['name']}', '#{submitter}');"
       end
@@ -156,13 +155,13 @@ class SubredditAnalysis
       @db.execute "insert or ignore into users (name, metadata, comments_ended_at, submissions_ended_at) values ('#{data['name']}',  '#{JSON.pretty_generate(data).gsub("'", "''")}', 0, 0);"
     when USER_SUBMISSION_TYPE
       @db.execute "insert or ignore into users (name) values ('#{data['reddit_obj'].name}');"
-      @db.execute "update users set submissions_ended_at=#{data['submissions_ended_at']}, submissions_after='#{data['submissions_after'] || ''}' where name='#{data['reddit_obj'].name}';"
+      @db.execute "update users set submissions_ended_at=#{data['submissions_ended_at']}, submissions_after='#{data['submissions_after'] || ''}' where name='#{data['reddit_obj'].name}' COLLATE NOCASE;"
       for subreddit_name in data['submissions']
         @db.execute "insert or replace into user_submissions (user_name, subreddit_name) values ('#{data['reddit_obj'].name}', '#{subreddit_name}');"
       end
     when USER_COMMENT_TYPE
       @db.execute "insert or ignore into users (name) values ('#{data['reddit_obj'].name}');"
-      @db.execute "update users set comments_ended_at=#{data['comments_ended_at']}, comments_after='#{data['comments_after'] || ''}' where name='#{data['reddit_obj'].name}';"
+      @db.execute "update users set comments_ended_at=#{data['comments_ended_at']}, comments_after='#{data['comments_after'] || ''}' where name='#{data['reddit_obj'].name}' COLLATE NOCASE;"
       for subreddit_name in data['comments']
         @db.execute "insert or replace into user_comments (user_name, subreddit_name) values ('#{data['reddit_obj'].name}', '#{subreddit_name}');"
       end
@@ -174,16 +173,16 @@ class SubredditAnalysis
   def read(name, type, default)
     data = default
     begin
-      subreddit = @db.execute("select name, ended_at, after from subreddits where name = '#{name}';").first
+      subreddit = @db.execute("select name, ended_at, after from subreddits where name = '#{name}' COLLATE NOCASE;").first
       case type
         when USER_TYPE
-          user = @db.execute("select * from users where name = '#{name}';")
+          user = @db.execute("select * from users where name = '#{name}' COLLATE NOCASE;")
         when SUBMITTER_TYPE
-          submitters = @db.execute("select name from submitters where subreddit_name = '#{name}';")
+          submitters = @db.execute("select name from submitters where subreddit_name = '#{name}' COLLATE NOCASE;")
           log("retrieved submitters for #{name}: subreddit ended_at #{subreddit[1]}")
           data = { 'name' => subreddit[0], 'ended_at' => subreddit[1] || default['ended_at'], 'after' => subreddit[2] || default['after'], 'submitters' => submitters}
         when COMMENTER_TYPE
-          subreddit = @db.execute("select name from subreddits where name = '#{name}';").first
+          subreddit = @db.execute("select name from subreddits where name = '#{name}' COLLATE NOCASE;").first
           submission = @db.execute("select id, ended_at, after from submissions where id='#{default['id']}'").first
           if (submission.nil?)
             return default
@@ -203,19 +202,28 @@ class SubredditAnalysis
 
   def analyze(subreddit)
     result = @db.execute <<-SQL
-    select count(*), subreddit_name from
-      (select subreddit_name
-        from user_submissions
-        where user_name in
-          (select distinct(name) from commenters where subreddit_name='#{subreddit.display_name}'
+      select s.subreddit_name, sum(s.count) as total from
+        (
+          select count(*) as count, subreddit_name
+              from user_submissions
+              where user_name in
+                (select distinct(name) from commenters where subreddit_name='#{subreddit.display_name}'
+                union
+                select distinct(name) from submitters where subreddit_name='#{subreddit.display_name}' collate nocase order by name asc)
+              and subreddit_name <> '#{subreddit.display_name}' collate NOCASE
           union
-          select distinct(name) from submitters where subreddit_name='#{subreddit.display_name}' order by name asc)
-      union select subreddit_name
-        from user_comments
-          where user_name in
-          (select distinct(name) from commenters where subreddit_name='#{subreddit.display_name}'
-            union select distinct(name) from submitters where subreddit_name='#{subreddit.display_name}' order by name asc))
-      group by subreddit_name order by subreddit_name;
+            select count(*) as count, subreddit_name
+                from user_comments
+                where user_name in
+                  (select distinct(name) from commenters where subreddit_name='#{subreddit.display_name}'
+                  union
+                  select distinct(name) from submitters where subreddit_name='#{subreddit.display_name}' collate nocase order by name asc)
+                and subreddit_name <> '#{subreddit.display_name}' collate NOCASE
+                group by subreddit_name
+                order by subreddit_name
+          ) as s
+      group by s.subreddit_name
+      order by total desc
       SQL
       filename = "reports/#{subreddit.display_name}_#{DateTime.now.strftime('%Y_%m_%d')}.csv"
       log("writing results to #{filename}")
@@ -248,7 +256,7 @@ class SubredditAnalysis
       bot.close if bot
       puts e
       if (++tries <= 2) then
-        sleep(1.hour)
+        sleep(3600)
         puts "Try again...(attempt #{tries} of 3)"
         SubredditAnalysis.run(subreddit)
       end
