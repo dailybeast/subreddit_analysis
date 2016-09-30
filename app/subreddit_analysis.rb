@@ -5,6 +5,7 @@ require 'yaml'
 require 'json'
 require 'sqlite3'
 require 'csv'
+require 'active_support/core_ext/numeric/time'
 
 class SubredditAnalysis
   attr_accessor :props, :client, :access
@@ -248,7 +249,7 @@ class SubredditAnalysis
       puts e
       if (++tries <= 2) then
         sleep(1.hour)
-        puts "Try again...(attempt #{tries+1} of 3)"
+        puts "Try again...(attempt #{tries} of 3)"
         SubredditAnalysis.run(subreddit)
       end
     ensure
