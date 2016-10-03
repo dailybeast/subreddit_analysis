@@ -147,7 +147,6 @@ class SubredditAnalysis
   def self.run(subreddit, retries=0)
     begin
       bot = SubredditAnalysis.new('./config/config.yml')
-      raise Exception.new
       bot.authorize
       subreddit = Subreddit.find_or_create(subreddit)
       bot.crawl_subreddit(subreddit)
