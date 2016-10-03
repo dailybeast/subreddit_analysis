@@ -144,11 +144,11 @@ class SubredditAnalysis
     end
   end
 
-  def self.run(subreddit, retries=0)
+  def self.run(name, retries=0)
     begin
       bot = SubredditAnalysis.new('./config/config.yml')
       bot.authorize
-      subreddit = Subreddit.find_or_create(subreddit)
+      subreddit = Subreddit.find_or_create(name)
       bot.crawl_subreddit(subreddit)
       bot.crawl_users(subreddit)
       bot.analyze(subreddit)

@@ -18,6 +18,7 @@ class BaseReddit < Base
       after = list.last.fullname
     end
     ended_at += limit
+    result_list = result_list || []
     return { result_list: result_list, ended_at: ended_at, after: after}
   end
 end
