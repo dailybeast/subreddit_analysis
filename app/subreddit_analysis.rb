@@ -172,8 +172,15 @@ class SubredditAnalysis
 
   def log(message)
     unless(ENV['environment'] == 'test') then
-      puts message
-      puts message.backtrace if message.respond_to?(:backtrace)
+      File.open("#{DateTime.now.strftime('%Y_%m_%d')}.log", 'a') do |file|
+        puts message
+        file.puts(message)
+        if message.respond_to?(:backtrace)
+          puts message.backtrace
+          file.puts(message)
+        end
+      end
+
     end
   end
 
