@@ -18,12 +18,12 @@ class Subreddit < BaseReddit
   end
 
   def save
-    @@db.execute "insert or ignore into subreddits (name) values ('#{name}');"
-    @@db.execute "update subreddits set metadata='#{metadata}', ended_at=#{ended_at}, after='#{after}' where name='#{name}' collate nocase;"
+    @@db.execute "insert or ignore into subreddits (name) values (#{quote(name)});"
+    @@db.execute "update subreddits set metadata=#{quote(metadata)}, ended_at=#{quote(ended_at)}, after=#{quote(after)} where name=#{quote(name)} collate nocase;"
     for submission in submissions do
       submission.save
     end
-    return true
+    return self
   end
 
   def get_submissions(limit, count)
@@ -31,7 +31,11 @@ class Subreddit < BaseReddit
     @submissions = result[:result_list]
     @ended_at = result[:ended_at]
     @after = result[:after]
-    return true
+    return @submissions
+  end
+
+  def unique_submitters_and_commenters
+    (SubredditSubmission.unique_submitters_for(self) + SubredditComment.unique_commenters_for(self)).uniq
   end
 
   def self.find_or_create(name)
@@ -39,12 +43,13 @@ class Subreddit < BaseReddit
   end
 
   def self.find(name)
-    row = self.find_one("select name, ended_at, after from subreddits where name = '#{name}' COLLATE NOCASE;")
+    row = self.find_one("select name, ended_at, after from subreddits where name = #{quote(name)} COLLATE NOCASE;")
     unless row.nil?
       subreddit = Subreddit.new
       subreddit.name = row[0]
       subreddit.ended_at = row[1]
       subreddit.after = row[2]
+      subreddit.submissions = SubredditSubmission.find_for(subreddit)
       return subreddit
     else
       return nil
@@ -53,8 +58,7 @@ class Subreddit < BaseReddit
 
   def self.create(name)
     subreddit = Subreddit.new(name: name)
-    subreddit.reddit_object
-    subreddit.metadata = JSON.pretty_generate(JSON.parse(subreddit.reddit_object.to_json)).gsub("'", "''")
+    subreddit.metadata = JSON.pretty_generate(JSON.parse(subreddit.reddit_object.to_json))
     subreddit.save
     return subreddit
   end

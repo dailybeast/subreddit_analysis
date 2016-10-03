@@ -23,16 +23,34 @@ class User < BaseReddit
     @reddit_object
   end
 
+  def set_counters(klass, ended_at, after)
+    if(klass == UserComment)
+      @comments_ended_at = ended_at
+      @comments_after = after
+    else
+      @submissions_ended_at = ended_at
+      @submissions_after = after
+    end
+  end
+
+  def get_counters(klass)
+    if(klass == UserComment)
+      return { ended_at: @comments_ended_at, after: @comments_after }
+    else
+      return { ended_at: @submissions_ended_at, after: @submissions_after }
+    end
+  end
+
   def save
-    @@db.execute "insert or ignore into users (name) values ('#{name}');"
+    @@db.execute "insert or ignore into users (name) values (#{quote(name)});"
     @@db.execute <<-SQL
       update users
-        set metadata='#{metadata}',
+        set metadata=#{quote(metadata)},
         submissions_ended_at=#{submissions_ended_at},
-        submissions_after='#{submissions_after}',
-        comments_ended_at='#{comments_ended_at}',
-        comments_after='#{comments_after}'
-        where name='#{name}' collate nocase;
+        submissions_after=#{quote(submissions_after)},
+        comments_ended_at=#{quote(comments_ended_at)},
+        comments_after=#{quote(comments_after)}
+        where name=#{quote(name)} collate nocase;
       SQL
       for submission in submissions do
         submission.save
@@ -45,7 +63,7 @@ class User < BaseReddit
 
   def get_submissions(limit, count)
     result = get_from_reddit(UserSubmission, @submissions, @submissions_ended_at, @submissions_after, limit, count)
-    @submissions = result[:result_list]
+    @submissions = result[:result_list] || []
     @submissions_ended_at = result[:ended_at]
     @submissions_after = result[:after]
     return true
@@ -53,7 +71,7 @@ class User < BaseReddit
 
   def get_comments(limit, count)
     result = get_from_reddit(UserComment, @comments, @comments_ended_at, @comments_after, limit, count)
-    @comments = result[:result_list]
+    @comments = result[:result_list]|| []
     @comments_ended_at = result[:ended_at]
     @comments_after = result[:after]
     return true
@@ -69,7 +87,7 @@ class User < BaseReddit
       submissions_ended_at, submissions_after,
       comments_ended_at, comments_after
       from users
-      where name = '#{name}' COLLATE NOCASE;
+      where name = #{quote(name)} COLLATE NOCASE;
     SQL
     unless (row.nil?)
       user = User.new
@@ -88,10 +106,8 @@ class User < BaseReddit
   end
 
   def self.create(name)
-    user = User.new
-    user.reddit_object = @@reddit_client.user_from_name(name)
-    user.name = user.reddit_object.name
-    user.metadata = JSON.pretty_generate(JSON.parse(user.reddit_object.to_json)).gsub("'", "''")
+    user = User.new(name: name)
+    user.metadata = JSON.pretty_generate(JSON.parse(user.reddit_object.to_json))
     user.save
     return user
   end

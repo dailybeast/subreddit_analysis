@@ -1,58 +1,57 @@
-# require 'minitest/autorun'
-# require 'rubygems'
-# require 'bundler/setup'
-# require 'pry'
-# require 'mocha/mini_test'
-# require "net/http"
-# require 'sqlite3'
-#
-#
-# require File.join(__dir__, '..', 'app', 'subreddit_analysis.rb')
-#
-# ENV['environment'] = 'test'
-#
-# describe SubredditAnalysis do
-#   before do
-#     @subreddit_analysis = SubredditAnalysis.new('spec/fixtures/config.yml')
-#     subreddit = JSON.load(File.new("spec/fixtures/funny_subreddit.json"))
-#     submission = JSON.load(File.new("spec/fixtures/funny_submitters.json"))
-#     @comments = JSON.load(File.new("spec/fixtures/funny_1324234_comments.json"))
-#     @subreddit_analysis.db.execute "delete from subreddits"
-#     @subreddit_analysis.db.execute "insert into subreddits (name, metadata, ended_at, after) values ('funny', '#{JSON.pretty_generate(subreddit).gsub("'", "''")}', #{submission['ended_at']}, '#{submission['after']}')"
-#     @subreddit_analysis.db.execute "delete from subreddit_submissions"
-#     @subreddit_analysis.db.execute "insert into subreddit_submissions (subreddit_name, id, ended_at, after)  values ('funny', '1324234', #{@comments['ended_at']}, '#{@comments['after']}')"
-#     @subreddit_analysis.db.execute "delete from subreddit_submitters"
-#     for submitter in submission["submitters"]
-#       @subreddit_analysis.db.execute "insert into subreddit_submitters (subreddit_name, name)  values ('funny', '#{submitter}')"
-#     end
-#     @subreddit_analysis.db.execute "delete from subreddit_comments"
-#     for comment in @comments["comments"]
-#       @subreddit_analysis.db.execute "insert into subreddit_comments (subreddit_name, submission_id, name)  values ('funny', '1324234', '#{comment}')"
-#     end
-#     @users = (@comments['comments'] + submission['submitters']).uniq.sort
-#     @subreddit_analysis.db.execute "delete from users"
-#     (0..@users.length/2).each do |i|
-#       @subreddit_analysis.db.execute "insert or ignore into users (name) values ('#{@users[i]}')"
-#     end
-#
-#     @client = MiniTest::Mock.new
-#     @subreddit_analysis.client = @client
-#     Redd.stubs(:it).returns(@client)
-#   end
-#
-#   after do
-#     @subreddit_analysis.close
-#   end
-#
-#   it "initializes properties" do
-#     assert_equal('reddit_bot', @subreddit_analysis.props["username"])
-#   end
-#
-#   it "authorizes" do
-#     @client.expect(:authorize!, nil)
-#     @subreddit_analysis.authorize
-#     assert(@client.verify)
-#   end
+require 'minitest/autorun'
+require 'rubygems'
+require 'bundler/setup'
+require 'pry'
+require 'mocha/mini_test'
+require "net/http"
+require 'sqlite3'
+
+
+require File.join(__dir__, '..', 'app', 'subreddit_analysis.rb')
+
+ENV['environment'] = 'test'
+
+describe SubredditAnalysis do
+  before do
+    @subreddit_analysis = SubredditAnalysis.new('spec/fixtures/config.yml')
+    # subreddit = JSON.load(File.new("spec/fixtures/funny_subreddit.json"))
+    # submission = JSON.load(File.new("spec/fixtures/funny_submitters.json"))
+    # @comments = JSON.load(File.new("spec/fixtures/funny_1324234_comments.json"))
+    # @subreddit_analysis.db.execute "delete from subreddits"
+    # @subreddit_analysis.db.execute "insert into subreddits (name, metadata, ended_at, after) values ('funny', '#{JSON.pretty_generate(subreddit).gsub("'", "''")}', #{submission['ended_at']}, '#{submission['after']}')"
+    # @subreddit_analysis.db.execute "delete from subreddit_submissions"
+    # @subreddit_analysis.db.execute "insert into subreddit_submissions (subreddit_name, id, ended_at, after)  values ('funny', '1324234', #{@comments['ended_at']}, '#{@comments['after']}')"
+    # @subreddit_analysis.db.execute "delete from subreddit_submitters"
+    # for submitter in submission["submitters"]
+    #   @subreddit_analysis.db.execute "insert into subreddit_submitters (subreddit_name, name)  values ('funny', #{quote(submitter)})"
+    # end
+    # @subreddit_analysis.db.execute "delete from subreddit_comments"
+    # for comment in @comments["comments"]
+    #   @subreddit_analysis.db.execute "insert into subreddit_comments (subreddit_name, submission_id, name)  values ('funny', '1324234', #{quote(comment)})"
+    # end
+    # @users = (@comments['comments'] + submission['submitters']).uniq.sort
+    # @subreddit_analysis.db.execute "delete from users"
+    # (0..@users.length/2).each do |i|
+    #   @subreddit_analysis.db.execute "insert or ignore into users (name) values ('#{@users[i]}')"
+    # end
+    #
+    @client = MiniTest::Mock.new
+    Redd.stubs(:it).returns(@client)
+  end
+
+  after do
+    # @subreddit_analysis.close
+  end
+
+  it "initializes properties" do
+    assert_equal('reddit_bot', @subreddit_analysis.props["username"])
+  end
+
+  it "authorizes" do
+    @client.expect(:authorize!, nil)
+    @subreddit_analysis.authorize
+    assert(@client.verify)
+  end
 #
 #   describe "read data" do
 #     describe "retrieves from data store" do
@@ -170,4 +169,4 @@
 #     end
 #
 #   end
-# end
+end

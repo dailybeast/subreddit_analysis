@@ -12,10 +12,34 @@ class SubredditComment < Base
   def save
     @@db.execute <<-SQL
       insert or replace into subreddit_comments
-        (subreddit_name, submission_name, name)
-        values ('#{subreddit.name}', '#{submission.name}', '#{name}')
+        (subreddit_name, submission_name, name, id, user_name)
+        values (#{quote(subreddit.name)}, #{quote(submission.name)}, #{quote(name)}, #{quote(id)}, #{quote(user_name)})
     SQL
     return self
+  end
+
+  def self.find_for(submission)
+    result = @@db.execute <<-SQL
+      select name, id, user_name
+      from subreddit_comments
+      where submission_name = #{quote(submission.name)}
+    SQL
+    result.map do |r|
+      SubredditComment.new({
+                            subreddit: submission.subreddit,
+                            submission: submission,
+                            name: r[0],
+                            id: r[1],
+                            user_name: r[2]
+                          })
+    end
+  end
+
+  def self.unique_commenters_for(subreddit)
+    result = @@db.execute <<-SQL
+      select user_name from subreddit_comments where subreddit_name=#{quote(subreddit.name)}
+    SQL
+    result.map { |row| row[0] }.uniq
   end
 
   def self.init_table

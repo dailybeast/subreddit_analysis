@@ -31,6 +31,45 @@ describe SubredditSubmission do
     @db.close
   end
 
+  describe "saves" do
+    before do
+      @subreddit = Subreddit.new(name: 'funny').save
+      @submission = SubredditSubmission.new({id: 'qei425', name: 'foo', subreddit: @subreddit})
+      @comment = SubredditComment.new({ subreddit: @subreddit, name: 'Bob', submission: @submission })
+      @submission.comments = [@comment]
+      @submission.save
+    end
+    it "saves" do
+      assert_equal("qei425", @db.execute("select id from subreddit_submissions where subreddit_name='funny';").first.first)
+    end
+    it "cascade saves comments" do
+      assert_equal(1, @db.execute("select count(*) from subreddit_comments where subreddit_name='funny';").first.first)
+    end
+  end
+
+  describe "find_for" do
+    before do
+      @subreddit = Subreddit.new(name: 'funny').save
+      SubredditSubmission.new(name: 'funny', subreddit: @subreddit).save
+    end
+
+    it "finds by subreddit " do
+      assert_equal(1, SubredditSubmission.find_for(@subreddit).length)
+    end
+  end
+
+  describe "finds unique_submitters_for" do
+    before do
+      @subreddit = Subreddit.new(name: 'funny').save
+      SubredditSubmission.new(subreddit: @subreddit, name: 'foo', user_name: 'foo_user').save
+      SubredditSubmission.new(subreddit: @subreddit, name: 'foo2', user_name: 'foo_user').save
+      SubredditSubmission.new(subreddit: @subreddit, name: 'bar', user_name: 'bar_user').save
+    end
+    it "removes dups" do
+      assert_equal(['bar_user', 'foo_user'], SubredditSubmission.unique_submitters_for(@subreddit).sort)
+    end
+  end
+
   describe "get_comments" do
     before do
       reddit_comment = stub(subreddit: 'foo_subreddit',

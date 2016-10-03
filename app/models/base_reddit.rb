@@ -15,9 +15,9 @@ class BaseReddit < Base
       end).uniq do |c|
           klass.unique_parent_child(self, c)
       end
-      ended_at += limit
       after = list.last.fullname
     end
+    ended_at += limit
     return { result_list: result_list, ended_at: ended_at, after: after}
   end
 end

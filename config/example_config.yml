@@ -4,5 +4,6 @@ username: reddit_bot
 password: snoo
 user_agent: 'subreddit analysis bot v.0.0.1 u/tdbdev'
 data_folder: data
-comment_depth: 1000
-submission_depth: 10000
+comment_limit: 1000
+submission_limit: 10000
+user_activity_limit: 1000

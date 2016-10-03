@@ -3,6 +3,18 @@ class Base
     props.each { |name, value| instance_variable_set("@#{name}", value) }
   end
 
+  def self.quote(s)
+    if s.nil?
+      return 'null'
+    elsif s.is_a? Numeric
+      return s
+    else
+      return "'#{s.gsub("'", "''")}'"
+    end
+  end
+  def quote(s)
+    Base.quote(s)
+  end
 
   def self.connections(db)
     @@db = db

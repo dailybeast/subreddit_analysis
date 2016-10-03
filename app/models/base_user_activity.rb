@@ -6,7 +6,7 @@ class BaseUserActivity < Base
   def save
     @@db.execute <<-SQL
     insert or replace into #{Object.const_get(self.class.name).tablename} (user_name, subreddit_name)
-      values ('#{user.name}', '#{subreddit_name}');
+      values (#{quote(user.name)}, #{quote(subreddit_name)});
     SQL
     return self
   end
@@ -17,7 +17,7 @@ class BaseUserActivity < Base
 
   def self.find_for(user)
     list = []
-    subreddit_names = @@db.execute("select distinct(subreddit_name) from #{tablename} where user_name = '#{user.name}' collate nocase;")
+    subreddit_names = @@db.execute("select distinct(subreddit_name) from #{tablename} where user_name = #{quote(user.name)} collate nocase;")
     for row in subreddit_names do
       list.push(Object.const_get(self.name).new({user: user, subreddit_name: row[0]}))
     end
