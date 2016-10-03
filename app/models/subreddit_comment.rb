@@ -1,7 +1,7 @@
 require_relative 'base'
 
 class SubredditComment < Base
-  attr_accessor :subreddit, :submission, :name
+  attr_accessor :subreddit, :submission, :name, :id, :user_name
   def initialize(props = {})
     super
     unless (submission.comments.include?(self))
@@ -12,8 +12,8 @@ class SubredditComment < Base
   def save
     @@db.execute <<-SQL
       insert or replace into subreddit_comments
-        (subreddit_name, submission_id, name)
-        values ('#{subreddit.name}', '#{submission.id}', '#{name}')
+        (subreddit_name, submission_name, name)
+        values ('#{subreddit.name}', '#{submission.name}', '#{name}')
     SQL
     return self
   end
@@ -22,9 +22,10 @@ class SubredditComment < Base
     @@db.execute <<-SQL
       create table if not exists subreddit_comments (
         subreddit_name varchar(255) references subreddits(name) ON UPDATE CASCADE,
-        submission_id varchar(255) references submissions(id) ON UPDATE CASCADE,
-        name varchar(255),
-        PRIMARY KEY (submission_id, name)
+        submission_name varchar(255) references submissions(name) ON UPDATE CASCADE,
+        name varchar(255) PRIMARY KEY,
+        id varchar(255),
+        user_name varchar(255)
       );
     SQL
   end
@@ -37,11 +38,11 @@ class SubredditComment < Base
   end
 
   def self.constructor_args_for_reddit_object(parent, raw_object)
-    { subreddit: parent.subreddit, submission: parent, name: raw_object.author }
+    { subreddit: parent.subreddit, submission: parent, name: raw_object.fullname, id: raw_object.id, user_name: raw_object.author }
   end
 
   def self.unique_parent_child(parent, child)
-    parent.id + child.name
+      parent.name + child.name
   end
 
 end

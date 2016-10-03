@@ -45,6 +45,7 @@ class User < BaseReddit
 
   def get_submissions(limit, count)
     result = get_from_reddit(UserSubmission, @submissions, @submissions_ended_at, @submissions_after, limit, count)
+    @submissions = result[:result_list]
     @submissions_ended_at = result[:ended_at]
     @submissions_after = result[:after]
     return true
@@ -52,6 +53,7 @@ class User < BaseReddit
 
   def get_comments(limit, count)
     result = get_from_reddit(UserComment, @comments, @comments_ended_at, @comments_after, limit, count)
+    @comments = result[:result_list]
     @comments_ended_at = result[:ended_at]
     @comments_after = result[:after]
     return true

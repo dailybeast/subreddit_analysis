@@ -61,7 +61,7 @@ describe Subreddit do
         assert_equal(1, @db.execute("select count(*) from subreddit_submissions where subreddit_name='funny';").first.first)
       end
       it "cascade saves comments" do
-        assert_equal(1, @db.execute("select count(*) from subreddit_comments where submission_id='qei425';").first.first)
+        assert_equal(1, @db.execute("select count(*) from subreddit_comments where submission_name='foo';").first.first)
       end
     end
   end
@@ -69,11 +69,23 @@ describe Subreddit do
   describe "get_submissions" do
     before do
       @subreddit = Subreddit.new(name: 'funny')
-      mock_submission = stub(subreddit: 'foo_subreddit', id: 'qey44v', author: 'bar_author')
+      reddit_submission = stub(subreddit: 'foo_subreddit',
+                                id: 'qey44v',
+                                author: 'bar_author',
+                                fullname: "new_submission_name")
+      reddit_dub_submission = stub(subreddit_name: 'foo_subreddit',
+                                    id: 'tu3023',
+                                    author: 'dup_author',
+                                    fullname: 'existing_submission_name')
       @reddit_object = MiniTest::Mock.new
       @reddit_object.expect(:nil?, false)
-      @reddit_object.expect(:get_new, [mock_submission], [{limit: 100, count: 10, after: 'bar'}])
-      @subreddit.submissions = [SubredditSubmission.new(user: @user, subreddit_name: 'foo_subreddit')]
+      @reddit_object.expect(:get_new,
+                              [reddit_submission, reddit_dub_submission],
+                              [{limit: 100, count: 10, after: 'bar'}])
+      @subreddit.submissions = [
+                                  SubredditSubmission.new(subreddit_name: 'foo_subreddit',
+                                                          id: 'tu3023',
+                                                          name: 'existing_submission_name')]
       @subreddit.reddit_object = @reddit_object
       @subreddit.after = 'bar'
       @subreddit.get_submissions(100, 10)
@@ -82,15 +94,16 @@ describe Subreddit do
       assert(@reddit_object.verify)
     end
     it "uniques the list" do
-      assert_equal(1, @subreddit.submissions.length)
+      assert_equal(2, @subreddit.submissions.length)
     end
     it "increments ended at" do
       assert_equal(100, @subreddit.ended_at)
     end
     it "sets after" do
-      assert_equal('qey44v', @subreddit.after)
+      assert_equal('existing_submission_name', @subreddit.after)
     end
   end
+
 
   it "inits db" do
     assert(@db.execute("select count(*) from subreddits;").first.first == 0)

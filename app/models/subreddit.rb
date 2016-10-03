@@ -28,8 +28,9 @@ class Subreddit < BaseReddit
 
   def get_submissions(limit, count)
     result = get_from_reddit(SubredditSubmission, @submissions, ended_at, after, limit, count)
-    ended_at = result[:ended_at]
-    after = result[:after]
+    @submissions = result[:result_list]
+    @ended_at = result[:ended_at]
+    @after = result[:after]
     return true
   end
 

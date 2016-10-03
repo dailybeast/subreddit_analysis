@@ -102,11 +102,11 @@ describe User do
 
     describe "get_submissions" do
       before do
-        mock_submission = stub(subreddit: 'foo_subreddit', fullname: 'qey44v')
+        reddit_submission = stub(subreddit: 'foo_subreddit', fullname: 'qey44v')
         @reddit_object = MiniTest::Mock.new
         @reddit_object.expect(:nil?, false)
-        @reddit_object.expect(:get_submissions, [mock_submission], [{limit: 100, count: 10, after: 'bar'}])
-        @user.submissions = [UserSubmission.new(user: @user, subreddit_name: 'foo_subreddit')]
+        @reddit_object.expect(:get_submissions, [reddit_submission], [{limit: 100, count: 10, after: 'bar'}])
+        @user.submissions = [UserSubmission.new(user: @user, subreddit_name: 'foo_subreddit', name: 'bar_name')]
         @user.reddit_object = @reddit_object
         @user.submissions_after = 'bar'
         @user.get_submissions(100, 10)
