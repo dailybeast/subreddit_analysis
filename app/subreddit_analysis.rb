@@ -170,7 +170,7 @@ class SubredditAnalysis
 
   private
 
-  def log(message)
+  def self.log(message)
     unless(ENV['environment'] == 'test') then
       File.open("#{DateTime.now.strftime('%Y_%m_%d')}.log", 'a') do |file|
         puts message
@@ -182,6 +182,10 @@ class SubredditAnalysis
       end
 
     end
+  end
+
+  def log(message)
+    SubredditAnalysis.log(message)
   end
 
   def init_db
