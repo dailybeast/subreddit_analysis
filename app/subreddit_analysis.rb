@@ -5,16 +5,22 @@ require 'yaml'
 require 'json'
 require 'sqlite3'
 require 'csv'
+require_relative 'models/base'
+require_relative 'models/subreddit'
+require_relative 'models/subreddit_submitter'
+require_relative 'models/subreddit_submission'
+require_relative 'models/subreddit_comment'
+require_relative 'models/user'
+require_relative 'models/user_comment'
+require_relative 'models/user_submission'
 
 class SubredditAnalysis
   attr_accessor :props, :client, :access
   attr_reader :db
 
-  COMMENTER_TYPE = 'commenters'
-  SUBREDDIT_TYPE = 'subreddits'
+  COMMENTER_TYPE = 'comments'
   SUBMISSION_TYPE = 'submissions'
   SUBMITTER_TYPE = 'submitters'
-  USER_TYPE = 'users'
   USER_SUBMISSION_TYPE = 'user_submissions'
   USER_COMMENT_TYPE = 'user_comments'
 
@@ -35,169 +41,20 @@ class SubredditAnalysis
     @access = @client.authorize!
   end
 
-  def subreddit(name)
-    log("get subreddit #{name}")
-    subreddit = @client.subreddit_from_name(name)
-    save(name, SUBREDDIT_TYPE, JSON.parse(subreddit.to_json))
-    return subreddit
+  def crawl_submissions_and_comments(subreddit, depth = @props['submission_depth'])
+    return crawl(depth, subreddit)
   end
 
-  def user(name)
-    log("get user #{name}")
-    reddit_user =  @client.user_from_name(name)
-    save(name, USER_TYPE, JSON.parse(reddit_user.to_json))
-    user = read(name, USER_TYPE, { 'name' => reddit_user.name, 'submissions_ended_at' => 0, 'comments_ended_at' => 0, 'submissions' => [], 'comments' => []})
-    user['reddit_obj'] = reddit_user
-    return user
-  end
-
-  def submissions(subreddit, depth = @props['submission_depth'])
-    return users_from_submissions_and_comments(depth, subreddit)
-  end
-
-  def commenters(subreddit, submission, depth = @props['comment_depth'])
-    return users_from_submissions_and_comments(depth, subreddit, submission)
+  def crawl_comments(subreddit, submission, depth = @props['comment_depth'])
+    return crawl(depth, subreddit, submission)
   end
 
   def users_other_submissions(subreddit)
-    users = commenters_and_submitters(subreddit)
-    depth = @props['submission_depth']
-    for name in users do
-      begin
-        log("find submissions for #{name}")
-        u = user(name)
-        count = u['submissions_ended_at']
-        #:count (Integer) — default: 0 — The number of items already seen in the listing.
-        #:limit (1..100) — default: 25 — The maximum number of things to return.
-        limit = depth - count  > 100 ? 100 : depth - count
-        if (limit > 0) then
-          (count..depth-1).each_slice(limit) do |a|
-            log("retrieve #{limit} submissions for #{name} starting at #{a.first}")
-            u = get_submissions(u, limit, a.first)
-          end
-          save(name, USER_SUBMISSION_TYPE, u)
-        end
-      rescue Exception => e
-        log(e)
-      end
-    end
+    users_other_activity_for(USER_SUBMISSION_TYPE, subreddit)
   end
 
   def users_other_comments(subreddit)
-    users = commenters_and_submitters(subreddit)
-    depth = @props['comment_depth']
-    for name in users do
-      begin
-        log("find comments for #{name}")
-        u = user(name)
-        count = u['comments_ended_at']
-        #:count (Integer) — default: 0 — The number of items already seen in the listing.
-        #:limit (1..100) — default: 25 — The maximum number of things to return.
-        limit = depth - count  > 100 ? 100 : depth - count
-        if (limit > 0) then
-          (count..depth-1).each_slice(limit) do |a|
-            log("retrieve #{limit} comments for #{name} starting at #{a.first}")
-            u = get_comments(u, limit, a.first)
-          end
-          save(name, USER_COMMENT_TYPE, u)
-        end
-      rescue Exception => e
-        log(e)
-      end
-    end
-  end
-
-  def users_from_submissions_and_comments(depth, subreddit, submission = nil)
-    display_name = subreddit.display_name
-    if (submission.nil?) then
-      type = SUBMITTER_TYPE
-    else
-      type = COMMENTER_TYPE
-      id = submission.id
-    end
-    data = read(display_name, type, { 'name' => display_name, 'ended_at' => 0, type => [], "id" => id })
-    #:count (Integer) — default: 0 — The number of items already seen in the listing.
-    #:limit (1..100) — default: 25 — The maximum number of things to return.
-    count =   data['ended_at']
-    limit = depth - count  > 100 ? 100 : depth - count
-    if (limit > 0) then
-      (count..depth-1).each_slice(limit) do |a|
-        log("retrieve #{limit} #{type} for #{display_name} #{submission.nil? ? '' : "new submission: " + submission.id} starting at #{a.first}")
-        if (submission.nil?)
-          data = get_submitters(subreddit, data, limit, a.first)
-        else
-          data = get_commenters(subreddit, data, limit, a.first)
-        end
-        log("saving #{data[type].length}...")
-        save(display_name, type, data)
-      end
-    end
-    return data
-  end
-
-  def save(name, type, data)
-    log "Save #{type} #{name} with ended_at #{data['ended_at']} and after #{data['after']}"
-    case type
-    when SUBREDDIT_TYPE
-      @db.execute "insert or ignore into subreddits (name, metadata) values ('#{data['display_name']}',  '#{JSON.pretty_generate(data).gsub("'", "''")}');"
-    when SUBMITTER_TYPE
-      @db.execute "insert or ignore into subreddits (name) values ('#{data['name']}');"
-      @db.execute "update subreddits set ended_at=#{data['ended_at']}, after='#{data['after'] || ''}' where name='#{data['name']}' COLLATE NOCASE;"
-      for submitter in data['submitters']
-        @db.execute "insert or replace into submitters (subreddit_name, name) values ('#{data['name']}', '#{submitter}');"
-      end
-    when COMMENTER_TYPE
-      @db.execute "insert or replace into submissions (subreddit_name, id, ended_at, after) values ('#{data['name']}', '#{data['id']}', #{data['ended_at']}, '#{data['after'] || ''}');"
-      for commenter in data['commenters']
-        @db.execute "insert or replace into commenters (subreddit_name, submission_id, name) values ('#{data['name']}', '#{data['id']}', '#{commenter}');"
-      end
-    when USER_TYPE
-      @db.execute "insert or ignore into users (name, metadata, comments_ended_at, submissions_ended_at) values ('#{data['name']}',  '#{JSON.pretty_generate(data).gsub("'", "''")}', 0, 0);"
-    when USER_SUBMISSION_TYPE
-      @db.execute "insert or ignore into users (name) values ('#{data['reddit_obj'].name}');"
-      @db.execute "update users set submissions_ended_at=#{data['submissions_ended_at']}, submissions_after='#{data['submissions_after'] || ''}' where name='#{data['reddit_obj'].name}' COLLATE NOCASE;"
-      for subreddit_name in data['submissions']
-        @db.execute "insert or replace into user_submissions (user_name, subreddit_name) values ('#{data['reddit_obj'].name}', '#{subreddit_name}');"
-      end
-    when USER_COMMENT_TYPE
-      @db.execute "insert or ignore into users (name) values ('#{data['reddit_obj'].name}');"
-      @db.execute "update users set comments_ended_at=#{data['comments_ended_at']}, comments_after='#{data['comments_after'] || ''}' where name='#{data['reddit_obj'].name}' COLLATE NOCASE;"
-      for subreddit_name in data['comments']
-        @db.execute "insert or replace into user_comments (user_name, subreddit_name) values ('#{data['reddit_obj'].name}', '#{subreddit_name}');"
-      end
-    else
-      log("Unhandled save: #{name}, #{type}, #{default}")
-    end
-  end
-
-  def read(name, type, default)
-    data = default
-    begin
-      subreddit = @db.execute("select name, ended_at, after from subreddits where name = '#{name}' COLLATE NOCASE;").first
-      case type
-        when USER_TYPE
-          user = @db.execute("select * from users where name = '#{name}' COLLATE NOCASE;")
-        when SUBMITTER_TYPE
-          submitters = @db.execute("select name from submitters where subreddit_name = '#{name}' COLLATE NOCASE;")
-          log("retrieved submitters for #{name}: subreddit ended_at #{subreddit[1]}")
-          data = { 'name' => subreddit[0], 'ended_at' => subreddit[1] || default['ended_at'], 'after' => subreddit[2] || default['after'], 'submitters' => submitters}
-        when COMMENTER_TYPE
-          subreddit = @db.execute("select name from subreddits where name = '#{name}' COLLATE NOCASE;").first
-          submission = @db.execute("select id, ended_at, after from submissions where id='#{default['id']}'").first
-          if (submission.nil?)
-            return default
-          else
-            commenter_list = @db.execute("select name from commenters where submission_id='#{default['id']}'")
-            data = { 'name' => subreddit[0], 'id' => submission[0], 'ended_at' => submission[1] || default['ended_at'], 'after' => submission[2] || default['after'], 'commenters' => commenter_list.flatten }
-          end
-        else
-          log("Unhandled read: #{name}, #{type}, #{default}")
-        end
-        return data
-      rescue Exception => e
-        log e
-        return default
-      end
+    users_other_activity_for(USER_COMMENT_TYPE, subreddit)
   end
 
   def analyze(subreddit)
@@ -207,25 +64,25 @@ class SubredditAnalysis
           select count(*) as count, subreddit_name
               from user_submissions
               where user_name in
-                (select distinct(name) from commenters where subreddit_name='#{subreddit.display_name}'
+                (select distinct(name) from subreddit_comments where subreddit_name='#{subreddit.name}'
                 union
-                select distinct(name) from submitters where subreddit_name='#{subreddit.display_name}' collate nocase order by name asc)
-              and subreddit_name <> '#{subreddit.display_name}' collate NOCASE
+                select distinct(name) from subreddit_submitters where subreddit_name='#{subreddit.name}' collate nocase order by name asc)
+              and subreddit_name <> '#{subreddit.name}' collate NOCASE
           union
             select count(*) as count, subreddit_name
                 from user_comments
                 where user_name in
-                  (select distinct(name) from commenters where subreddit_name='#{subreddit.display_name}'
+                  (select distinct(name) from subreddit_comments where subreddit_name='#{subreddit.name}'
                   union
-                  select distinct(name) from submitters where subreddit_name='#{subreddit.display_name}' collate nocase order by name asc)
-                and subreddit_name <> '#{subreddit.display_name}' collate NOCASE
+                  select distinct(name) from subreddit_submitters where subreddit_name='#{subreddit.name}' collate nocase order by name asc)
+                and subreddit_name <> '#{subreddit.name}' collate NOCASE
                 group by subreddit_name
                 order by subreddit_name
           ) as s
       group by s.subreddit_name
       order by total desc
       SQL
-      filename = "reports/#{subreddit.display_name}_#{DateTime.now.strftime('%Y_%m_%d')}.csv"
+      filename = "reports/#{subreddit.name}_#{DateTime.now.strftime('%Y_%m_%d')}.csv"
       log("writing results to #{filename}")
       CSV.open(filename, "wb") do |csv|
         csv << ["count", "subreddit"]
@@ -235,19 +92,13 @@ class SubredditAnalysis
       end
   end
 
-  def commenters_and_submitters(subreddit)
-    commenters =  @db.execute "select name from commenters where subreddit_name='#{subreddit.display_name}'"
-    submitters = @db.execute "select name from submitters where subreddit_name='#{subreddit.display_name}'"
-    return (commenters.flatten + submitters.flatten).sort.uniq
-  end
-
   def self.run(subreddit)
     begin
       tries = 0
       bot = SubredditAnalysis.new('./config/config.yml')
       bot.authorize
-      subreddit = bot.subreddit(subreddit)
-      bot.submissions(subreddit)
+      subreddit = Subreddit.find_or_create(subreddit, bot.client)
+      bot.crawl_submissions_and_comments(subreddit)
       bot.users_other_submissions(subreddit)
       bot.users_other_comments(subreddit)
       bot.analyze(subreddit)
@@ -255,6 +106,7 @@ class SubredditAnalysis
     rescue Exception => e
       bot.close if bot
       puts e
+      puts e.backtrace
       if (++tries <= 2) then
         sleep(3600)
         puts "Try again...(attempt #{tries} of 3)"
@@ -274,40 +126,129 @@ class SubredditAnalysis
     end
   end
 
-  def get_commenters(subreddit, data, limit, count)
-    comment_list = subreddit.get_comments(limit: limit, count: count, after: data['after'])
+  def users_other_activity_for(type, subreddit)
+    users = comments_and_submitters(subreddit)
+    puts "USERS #{users}"
+    depth = type === USER_COMMENT_TYPE ? @props['comment_depth'] : @props['submission_depth']
+    for name in users do
+      begin
+        log("find #{type} for #{name}")
+        user = User.find_or_create(name, client)
+        count = type === USER_COMMENT_TYPE ? user.comments_ended_at : user.submissions_ended_at
+        count = type === USER_COMMENT_TYPE ? user.comments.length : user.submissions.length
+        #:count (Integer) — default: 0 — The number of items already seen in the listing.
+        #:limit (1..100) — default: 25 — The maximum number of things to return.
+        limit = depth - count  > 100 ? 100 : depth - count
+        if (limit > 0) then
+          (count..depth-1).each_slice(limit) do |a|
+            log("retrieve #{limit} comments for #{name} starting at #{a.first}")
+            type === USER_COMMENT_TYPE ? user.get_comments(limit, a.first) : user.get_submissions(limit, a.first)
+          end
+          user.save
+        else
+          log("Already at #{count} #{type}. Skip.")
+        end
+      rescue Exception => e
+        log(e)
+      end
+    end
+  end
+
+
+  def crawl(depth, subreddit, submission = nil)
+    display_name = subreddit.name
+    if (submission.nil?) then
+      type = SUBMITTER_TYPE
+    else
+      type = COMMENTER_TYPE
+      id = submission.id
+    end
+    data = read(display_name, type, { 'name' => display_name, 'ended_at' => 0, type => [], "id" => id })
+    #:count (Integer) — default: 0 — The number of items already seen in the listing.
+    #:limit (1..100) — default: 25 — The maximum number of things to return.
+    count =   data['ended_at']
+    limit = depth - count  > 100 ? 100 : depth - count
+    if (limit > 0) then
+      (count..depth-1).each_slice(limit) do |a|
+        log("retrieve #{limit} #{type} for #{display_name} #{submission.nil? ? '' : "new submission: " + submission.id} starting at #{a.first}")
+        if (submission.nil?)
+          data = get_submitters(subreddit, data, limit, a.first)
+        else
+          data = get_comments(subreddit, data, limit, a.first)
+        end
+        log("saving #{data[type].length}...")
+        save(display_name, type, data)
+      end
+    else
+      log("Already at #{data['ended_at']} #{type}. Skip.")
+    end
+    return data
+  end
+
+  def save(name, type, data)
+    log "Save #{type} #{name} with ended_at #{data['ended_at']} and after #{data['after']}"
+    case type
+    when SUBMITTER_TYPE
+      @db.execute "insert or ignore into subreddits (name) values ('#{data['name']}');"
+      @db.execute "update subreddits set ended_at=#{data['ended_at']}, after='#{data['after'] || ''}' where name='#{data['name']}' COLLATE NOCASE;"
+      for submitter in data['submitters']
+        @db.execute "insert or replace into subreddit_submitters (subreddit_name, name) values ('#{data['name']}', '#{submitter}');"
+      end
+    when COMMENTER_TYPE
+      @db.execute "insert or replace into subreddit_submissions (subreddit_name, id, ended_at, after) values ('#{data['name']}', '#{data['id']}', #{data['ended_at']}, '#{data['after'] || ''}');"
+      for comment in data['comments']
+        @db.execute "insert or replace into subreddit_comments (subreddit_name, submission_id, name) values ('#{data['name']}', '#{data['id']}', '#{comment}');"
+      end
+    else
+      log("Unhandled save: #{name}, #{type}, #{default}")
+    end
+  end
+
+  def read(name, type, default)
+    data = default
+    begin
+      subreddit = @db.execute("select name, ended_at, after from subreddits where name = '#{name}' COLLATE NOCASE;").first
+      case type
+        when SUBMITTER_TYPE
+          submitters = @db.execute("select name from subreddit_submitters where subreddit_name = '#{name}' COLLATE NOCASE;")
+          log("retrieved submitters for #{name}: subreddit ended_at #{subreddit[1]}")
+          data = { 'name' => subreddit[0], 'ended_at' => subreddit[1] || default['ended_at'], 'after' => subreddit[2] || default['after'], 'submitters' => submitters}
+        when COMMENTER_TYPE
+          submission = @db.execute("select id, ended_at, after from subreddit_submissions where id='#{default['id']}'").first
+          if (submission.nil?)
+            return default
+          else
+            comment_list = @db.execute("select name from subreddit_comments where submission_id='#{default['id']}'")
+            data = { 'name' => subreddit[0], 'id' => submission[0], 'ended_at' => submission[1] || default['ended_at'], 'after' => submission[2] || default['after'], 'comments' => comment_list.flatten }
+          end
+        else
+          log("Unhandled read: #{name}, #{type}, #{default}")
+        end
+        return data
+      rescue Exception => e
+        log e
+        return default
+      end
+  end
+
+  def comments_and_submitters(subreddit)
+    c =  @db.execute "select name from subreddit_comments where subreddit_name='#{subreddit.name}'"
+    puts "COMMENTERS #{c}"
+    s = @db.execute "select name from subreddit_submitters where subreddit_name='#{subreddit.name}'"
+    puts "SUBMITTERS #{s}"
+    puts "FLATTEN UNQ SORT #{(c.flatten + s.flatten).sort.uniq}"
+    return (c.flatten + s.flatten).sort.uniq
+  end
+
+  def get_comments(subreddit, data, limit, count)
+    comment_list = subreddit.reddit_object.get_comments(limit: limit, count: count, after: data['after'])
     return to_author_list(comment_list, COMMENTER_TYPE, data, limit, count)
   end
 
   def get_submitters(subreddit, data, limit, count)
-    submission_list = subreddit.get_new(limit: limit, count: count, after: data['after'])
-    submission_list.each { |s| commenters(subreddit, s) }
+    submission_list = subreddit.reddit_object.get_new(limit: limit, count: count, after: data['after'])
+    submission_list.each { |s| crawl_comments(subreddit, s) }
     return to_author_list(submission_list, SUBMITTER_TYPE, data, limit, count)
-  end
-
-
-  def get_submissions(u, limit, count)
-    args = { limit: limit, count: count }
-    if(u['submissions_after']) then
-      args[:after] = u['submissions_after']
-    end
-    list = u['reddit_obj'].get_submitted(args)
-    u['submissions'] = (list.map {|r| r.subreddit } + u['submissions']).uniq ##field that references subreddit???
-    u['ended_at'] = limit + count
-    u['after'] = list.last.fullname
-    return u
-  end
-
-  def get_comments(u, limit, count)
-    args = { limit: limit, count: count }
-    if(u['comments_after']) then
-      args[:after] = u['comments_after']
-    end
-    list = u['reddit_obj'].get_submitted(args)
-    u['comments'] = (list.map {|r| r.subreddit } + u['comments']).uniq ##field that references subreddit???
-    u['ended_at'] = limit + count
-    u['after'] = list.last.fullname
-    return u
   end
 
   def to_author_list(list, type, data, limit, count)
@@ -320,59 +261,14 @@ class SubredditAnalysis
 
   def init_db
     db = SQLite3::Database.new "#{@props['data_folder']}/subreddit_analysis_#{@environment}.db"
-    db.execute <<-SQL
-      create table if not exists subreddits (
-        name varchar(255) PRIMARY KEY,
-        metadata text,
-        ended_at integer,
-        after varchar(255)
-      );
-    SQL
-    db.execute <<-SQL
-      create table if not exists submitters (
-        subreddit_name varchar(255) references subreddits(name) ON UPDATE CASCADE,
-        name varchar(255),
-        PRIMARY KEY (name, subreddit_name)
-      );
-    SQL
-    db.execute <<-SQL
-      create table if not exists submissions (
-        subreddit_name varchar(255) references subreddits(name) ON UPDATE CASCADE,
-        id varchar(255) PRIMARY KEY,
-        ended_at integer,
-        after varchar(255)
-      );
-    SQL
-    db.execute <<-SQL
-      create table if not exists commenters (
-        subreddit_name varchar(255) references subreddits(name) ON UPDATE CASCADE,
-        submission_id varchar(255) references submissions(id) ON UPDATE CASCADE,
-        name varchar(255),
-        PRIMARY KEY (submission_id, name)
-      );
-    SQL
-    db.execute <<-SQL
-      create table if not exists users (
-        name varchar(255) PRIMARY KEY,
-        metadata text,
-        submissions_ended_at integer,
-        submissions_after varchar(255),
-        comments_ended_at integer,
-        comments_after varchar(255)
-      );
-    SQL
-    db.execute <<-SQL
-      create table if not exists user_submissions (
-        user_name varchar(255)  references users(name) ON UPDATE CASCADE,
-        subreddit_name varchar(255)
-      );
-    SQL
-    db.execute <<-SQL
-      create table if not exists user_comments (
-        user_name varchar(255)  references users(name) ON UPDATE CASCADE,
-        subreddit_name varchar(255)
-      );
-    SQL
+    Base.connections(db)
+    Subreddit.init_table
+    SubredditSubmitter.init_table
+    SubredditSubmission.init_table
+    SubredditComment.init_table
+    User.init_table
+    UserComment.init_table
+    UserSubmission.init_table
     return db
   end
 end
