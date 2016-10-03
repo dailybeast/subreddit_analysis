@@ -19,6 +19,7 @@ describe Subreddit do
     @client = MiniTest::Mock.new
     @client.expect(:subreddit_from_name, stub(display_name: 'funny', to_json: { display_name: 'funny' }.to_json), ['funny'])
     Subreddit.connections(@db)
+    Subreddit.reddit_client(@client)
     Subreddit.init_table
     SubredditSubmission.init_table
     SubredditComment.init_table
@@ -37,7 +38,6 @@ describe Subreddit do
     end
 
     it "lazy loads reddit_object" do
-      @subreddit.reddit_client = @client
       @subreddit.reddit_object
       assert(@client.verify)
     end
@@ -112,7 +112,7 @@ describe Subreddit do
 
   describe 'create' do
     before do
-      Subreddit.create('funny', @client)
+      Subreddit.create('funny')
     end
     it "finds subreddit_from_name" do
       assert(@client.verify)

@@ -6,7 +6,7 @@ require_relative 'user_submission'
 class User < BaseReddit
   attr_accessor :name, :metadata, :submissions_ended_at, :submissions_after
   attr_accessor :comments_ended_at, :comments_after, :reddit_object
-  attr_accessor :comments, :submissions, :reddit_client
+  attr_accessor :comments, :submissions
 
   def initialize(props = {})
     @submissions = []
@@ -18,7 +18,7 @@ class User < BaseReddit
 
   def reddit_object
     if(@reddit_object.nil?)
-      @reddit_object = @reddit_client.user_from_name(@name)
+      @reddit_object = @@reddit_client.user_from_name(@name)
     end
     @reddit_object
   end
@@ -59,11 +59,11 @@ class User < BaseReddit
     return true
   end
 
-  def self.find_or_create(name, reddit_client)
-    self.find(name, reddit_client) || self.create(name, reddit_client)
+  def self.find_or_create(name)
+    self.find(name) || self.create(name)
   end
 
-  def self.find(name, reddit_client)
+  def self.find(name)
     row = self.find_one <<-SQL
       select name, metadata,
       submissions_ended_at, submissions_after,
@@ -73,7 +73,6 @@ class User < BaseReddit
     SQL
     unless (row.nil?)
       user = User.new
-      user.reddit_client = reddit_client #lazyload
       user.name = row[0]
       user.metadata = row[1]
       user.submissions_ended_at = row[2]
@@ -88,9 +87,9 @@ class User < BaseReddit
     end
   end
 
-  def self.create(name, reddit_client)
+  def self.create(name)
     user = User.new
-    user.reddit_object = reddit_client.user_from_name(name)
+    user.reddit_object = @@reddit_client.user_from_name(name)
     user.name = user.reddit_object.name
     user.metadata = JSON.pretty_generate(JSON.parse(user.reddit_object.to_json)).gsub("'", "''")
     user.save

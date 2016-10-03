@@ -2,7 +2,7 @@ require 'json'
 require_relative 'base_reddit'
 
 class Subreddit < BaseReddit
-  attr_accessor :name, :metadata, :ended_at, :after, :reddit_object, :submissions, :reddit_client
+  attr_accessor :name, :metadata, :ended_at, :after, :reddit_object, :submissions
 
   def initialize(props = {})
     @ended_at = 0
@@ -12,7 +12,7 @@ class Subreddit < BaseReddit
 
   def reddit_object
     if(@reddit_object.nil?)
-      @reddit_object = @reddit_client.subreddit_from_name(@name)
+      @reddit_object = @@reddit_client.subreddit_from_name(@name)
     end
     @reddit_object
   end
@@ -34,15 +34,14 @@ class Subreddit < BaseReddit
     return true
   end
 
-  def self.find_or_create(name, reddit_client)
-    return self.find(name, reddit_client) || self.create(name, reddit_client)
+  def self.find_or_create(name)
+    return self.find(name) || self.create(name)
   end
 
-  def self.find(name, reddit_client)
+  def self.find(name)
     row = self.find_one("select name, ended_at, after from subreddits where name = '#{name}' COLLATE NOCASE;")
     unless row.nil?
       subreddit = Subreddit.new
-      subreddit.reddit_client = reddit_client #lazy load
       subreddit.name = row[0]
       subreddit.ended_at = row[1]
       subreddit.after = row[2]
@@ -52,10 +51,9 @@ class Subreddit < BaseReddit
     end
   end
 
-  def self.create(name, reddit_client)
-    subreddit = Subreddit.new
-    subreddit.reddit_object = reddit_client.subreddit_from_name(name)
-    subreddit.name = subreddit.reddit_object.display_name
+  def self.create(name)
+    subreddit = Subreddit.new(name: name)
+    subreddit.reddit_object
     subreddit.metadata = JSON.pretty_generate(JSON.parse(subreddit.reddit_object.to_json)).gsub("'", "''")
     subreddit.save
     return subreddit

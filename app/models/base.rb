@@ -8,6 +8,10 @@ class Base
     @@db = db
   end
 
+  def self.reddit_client(reddit_client)
+    @@reddit_client = reddit_client
+  end
+
   def self.find_one(query)
     rows = @@db.execute(query)
     if rows && rows.length > 0

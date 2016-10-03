@@ -19,6 +19,7 @@ describe User do
     @client = MiniTest::Mock.new
     @client.expect(:user_from_name, stub(name: 'foo', to_json: { name: 'foo' }.to_json), ['foo'])
     User.connections(@db)
+    User.reddit_client(@client)
     User.init_table
   end
 
@@ -34,7 +35,6 @@ describe User do
     end
 
     it "lazy loads reddit_object" do
-      @user.reddit_client = @client
       @user.reddit_object
       assert(@client.verify)
     end
@@ -128,7 +128,7 @@ describe User do
 
   describe 'create' do
     before do
-      User.create('foo', @client)
+      User.create('foo')
     end
     it "finds user_from_name" do
       assert(@client.verify)
@@ -142,10 +142,10 @@ describe User do
     before do
       UserComment.init_table
       UserSubmission.init_table
-      user = User.create('foo', @client)
+      user = User.create('foo')
       UserSubmission.create(user, 'foo_subreddit')
       UserComment.create(user, 'foo_subreddit')
-      @user = User.find('foo', @client)
+      @user = User.find('foo')
     end
     after do
       UserComment.destroy_table

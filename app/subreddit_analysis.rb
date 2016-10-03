@@ -7,7 +7,6 @@ require 'sqlite3'
 require 'csv'
 require_relative 'models/base'
 require_relative 'models/subreddit'
-require_relative 'models/subreddit_submitter'
 require_relative 'models/subreddit_submission'
 require_relative 'models/subreddit_comment'
 require_relative 'models/user'
@@ -20,7 +19,6 @@ class SubredditAnalysis
 
   COMMENTER_TYPE = 'comments'
   SUBMISSION_TYPE = 'submissions'
-  SUBMITTER_TYPE = 'submitters'
   USER_SUBMISSION_TYPE = 'user_submissions'
   USER_COMMENT_TYPE = 'user_comments'
 
@@ -41,56 +39,56 @@ class SubredditAnalysis
     @access = @client.authorize!
   end
 
-  def crawl_submissions_and_comments(subreddit, depth = @props['submission_depth'])
-    return crawl(depth, subreddit)
+  def crawl_subreddit_submissions_and_comments(subreddit, depth = @props['submission_depth'])
+    return crawl_subreddit(depth, subreddit)
   end
 
-  def crawl_comments(subreddit, submission, depth = @props['comment_depth'])
-    return crawl(depth, subreddit, submission)
+  def crawl_subreddit_comments(subreddit, submission, depth = @props['comment_depth'])
+    return crawl_subreddit(depth, subreddit, submission)
   end
 
   def users_other_submissions(subreddit)
-    users_other_activity_for(USER_SUBMISSION_TYPE, subreddit)
+    crawl_user(USER_SUBMISSION_TYPE, subreddit)
   end
 
   def users_other_comments(subreddit)
-    users_other_activity_for(USER_COMMENT_TYPE, subreddit)
+    crawl_user(USER_COMMENT_TYPE, subreddit)
   end
 
-  def analyze(subreddit)
-    result = @db.execute <<-SQL
-      select s.subreddit_name, sum(s.count) as total from
-        (
-          select count(*) as count, subreddit_name
-              from user_submissions
-              where user_name in
-                (select distinct(name) from subreddit_comments where subreddit_name='#{subreddit.name}'
-                union
-                select distinct(name) from subreddit_submitters where subreddit_name='#{subreddit.name}' collate nocase order by name asc)
-              and subreddit_name <> '#{subreddit.name}' collate NOCASE
-          union
-            select count(*) as count, subreddit_name
-                from user_comments
-                where user_name in
-                  (select distinct(name) from subreddit_comments where subreddit_name='#{subreddit.name}'
-                  union
-                  select distinct(name) from subreddit_submitters where subreddit_name='#{subreddit.name}' collate nocase order by name asc)
-                and subreddit_name <> '#{subreddit.name}' collate NOCASE
-                group by subreddit_name
-                order by subreddit_name
-          ) as s
-      group by s.subreddit_name
-      order by total desc
-      SQL
-      filename = "reports/#{subreddit.name}_#{DateTime.now.strftime('%Y_%m_%d')}.csv"
-      log("writing results to #{filename}")
-      CSV.open(filename, "wb") do |csv|
-        csv << ["count", "subreddit"]
-        for row in result
-          csv << row
-        end
-      end
-  end
+  # def analyze(subreddit)
+  #   result = @db.execute <<-SQL
+  #     select s.subreddit_name, sum(s.count) as total from
+  #       (
+  #         select count(*) as count, subreddit_name
+  #             from user_submissions
+  #             where user_name in
+  #               (select distinct(name) from subreddit_comments where subreddit_name='#{subreddit.name}'
+  #               union
+  #               select distinct(name) from subreddit_submitters where subreddit_name='#{subreddit.name}' collate nocase order by name asc)
+  #             and subreddit_name <> '#{subreddit.name}' collate NOCASE
+  #         union
+  #           select count(*) as count, subreddit_name
+  #               from user_comments
+  #               where user_name in
+  #                 (select distinct(name) from subreddit_comments where subreddit_name='#{subreddit.name}'
+  #                 union
+  #                 select distinct(name) from subreddit_submitters where subreddit_name='#{subreddit.name}' collate nocase order by name asc)
+  #               and subreddit_name <> '#{subreddit.name}' collate NOCASE
+  #               group by subreddit_name
+  #               order by subreddit_name
+  #         ) as s
+  #     group by s.subreddit_name
+  #     order by total desc
+  #     SQL
+  #     filename = "reports/#{subreddit.name}_#{DateTime.now.strftime('%Y_%m_%d')}.csv"
+  #     log("writing results to #{filename}")
+  #     CSV.open(filename, "wb") do |csv|
+  #       csv << ["count", "subreddit"]
+  #       for row in result
+  #         csv << row
+  #       end
+  #     end
+  # end
 
   def self.run(subreddit)
     begin
@@ -98,9 +96,8 @@ class SubredditAnalysis
       bot = SubredditAnalysis.new('./config/config.yml')
       bot.authorize
       subreddit = Subreddit.find_or_create(subreddit, bot.client)
-      bot.crawl_submissions_and_comments(subreddit)
-      bot.users_other_submissions(subreddit)
-      bot.users_other_comments(subreddit)
+      bot.crawl_subreddit(subreddit)
+      bot.crawl_subreddit_users(subreddit)
       bot.analyze(subreddit)
       puts "done."
     rescue Exception => e
@@ -126,7 +123,7 @@ class SubredditAnalysis
     end
   end
 
-  def users_other_activity_for(type, subreddit)
+  def crawl_user(type, subreddit)
     users = comments_and_submitters(subreddit)
     puts "USERS #{users}"
     depth = type === USER_COMMENT_TYPE ? @props['comment_depth'] : @props['submission_depth']
@@ -155,14 +152,7 @@ class SubredditAnalysis
   end
 
 
-  def crawl(depth, subreddit, submission = nil)
-    display_name = subreddit.name
-    if (submission.nil?) then
-      type = SUBMITTER_TYPE
-    else
-      type = COMMENTER_TYPE
-      id = submission.id
-    end
+  def crawl_subreddit(depth, subreddit, submission = nil)
     data = read(display_name, type, { 'name' => display_name, 'ended_at' => 0, type => [], "id" => id })
     #:count (Integer) — default: 0 — The number of items already seen in the listing.
     #:limit (1..100) — default: 25 — The maximum number of things to return.
@@ -185,51 +175,6 @@ class SubredditAnalysis
     return data
   end
 
-  def save(name, type, data)
-    log "Save #{type} #{name} with ended_at #{data['ended_at']} and after #{data['after']}"
-    case type
-    when SUBMITTER_TYPE
-      @db.execute "insert or ignore into subreddits (name) values ('#{data['name']}');"
-      @db.execute "update subreddits set ended_at=#{data['ended_at']}, after='#{data['after'] || ''}' where name='#{data['name']}' COLLATE NOCASE;"
-      for submitter in data['submitters']
-        @db.execute "insert or replace into subreddit_submitters (subreddit_name, name) values ('#{data['name']}', '#{submitter}');"
-      end
-    when COMMENTER_TYPE
-      @db.execute "insert or replace into subreddit_submissions (subreddit_name, id, ended_at, after) values ('#{data['name']}', '#{data['id']}', #{data['ended_at']}, '#{data['after'] || ''}');"
-      for comment in data['comments']
-        @db.execute "insert or replace into subreddit_comments (subreddit_name, submission_id, name) values ('#{data['name']}', '#{data['id']}', '#{comment}');"
-      end
-    else
-      log("Unhandled save: #{name}, #{type}, #{default}")
-    end
-  end
-
-  def read(name, type, default)
-    data = default
-    begin
-      subreddit = @db.execute("select name, ended_at, after from subreddits where name = '#{name}' COLLATE NOCASE;").first
-      case type
-        when SUBMITTER_TYPE
-          submitters = @db.execute("select name from subreddit_submitters where subreddit_name = '#{name}' COLLATE NOCASE;")
-          log("retrieved submitters for #{name}: subreddit ended_at #{subreddit[1]}")
-          data = { 'name' => subreddit[0], 'ended_at' => subreddit[1] || default['ended_at'], 'after' => subreddit[2] || default['after'], 'submitters' => submitters}
-        when COMMENTER_TYPE
-          submission = @db.execute("select id, ended_at, after from subreddit_submissions where id='#{default['id']}'").first
-          if (submission.nil?)
-            return default
-          else
-            comment_list = @db.execute("select name from subreddit_comments where submission_id='#{default['id']}'")
-            data = { 'name' => subreddit[0], 'id' => submission[0], 'ended_at' => submission[1] || default['ended_at'], 'after' => submission[2] || default['after'], 'comments' => comment_list.flatten }
-          end
-        else
-          log("Unhandled read: #{name}, #{type}, #{default}")
-        end
-        return data
-      rescue Exception => e
-        log e
-        return default
-      end
-  end
 
   def comments_and_submitters(subreddit)
     c =  @db.execute "select name from subreddit_comments where subreddit_name='#{subreddit.name}'"
@@ -247,7 +192,7 @@ class SubredditAnalysis
 
   def get_submitters(subreddit, data, limit, count)
     submission_list = subreddit.reddit_object.get_new(limit: limit, count: count, after: data['after'])
-    submission_list.each { |s| crawl_comments(subreddit, s) }
+    submission_list.each { |s| crawl_subreddit_comments(subreddit, s) }
     return to_author_list(submission_list, SUBMITTER_TYPE, data, limit, count)
   end
 
@@ -263,7 +208,6 @@ class SubredditAnalysis
     db = SQLite3::Database.new "#{@props['data_folder']}/subreddit_analysis_#{@environment}.db"
     Base.connections(db)
     Subreddit.init_table
-    SubredditSubmitter.init_table
     SubredditSubmission.init_table
     SubredditComment.init_table
     User.init_table
