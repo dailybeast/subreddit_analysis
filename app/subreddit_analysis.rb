@@ -144,10 +144,10 @@ class SubredditAnalysis
     end
   end
 
-  def self.run(subreddit)
+  def self.run(subreddit, retries=0)
     begin
-      tries = 0
       bot = SubredditAnalysis.new('./config/config.yml')
+      raise Exception.new
       bot.authorize
       subreddit = Subreddit.find_or_create(subreddit)
       bot.crawl_subreddit(subreddit)
@@ -156,12 +156,14 @@ class SubredditAnalysis
       puts "done."
     rescue Exception => e
       bot.close if bot
-      puts e
-      puts e.backtrace
-      if (++tries <= 2) then
-        sleep(3600)
-        puts "Try again...(attempt #{tries} of 3)"
-        SubredditAnalysis.run(subreddit)
+      log(e)
+      if ((retries += 1) <= 2) then
+        log("Going to sleep after error. Try again...(attempt #{retries} of 3)")
+        sleep(900)
+        log("Waking up! Try again...(attempt #{retries} of 3)")
+        SubredditAnalysis.run(subreddit, retries)
+      else
+        log("Failed after #{retries} retries.")
       end
     ensure
       bot.close if bot
@@ -177,7 +179,7 @@ class SubredditAnalysis
         file.puts(message)
         if message.respond_to?(:backtrace)
           puts message.backtrace
-          file.puts(message)
+          file.puts(message.backtrace)
         end
       end
 
