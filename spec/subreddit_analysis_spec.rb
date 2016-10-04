@@ -5,6 +5,7 @@ require 'pry'
 require 'mocha/mini_test'
 require "net/http"
 require 'sqlite3'
+require 'csv'
 
 
 require File.join(__dir__, '..', 'app', 'subreddit_analysis.rb')
@@ -14,33 +15,15 @@ ENV['environment'] = 'test'
 describe SubredditAnalysis do
   before do
     @subreddit_analysis = SubredditAnalysis.new('spec/fixtures/config.yml')
-    # subreddit = JSON.load(File.new("spec/fixtures/funny_subreddit.json"))
-    # submission = JSON.load(File.new("spec/fixtures/funny_submitters.json"))
-    # @comments = JSON.load(File.new("spec/fixtures/funny_1324234_comments.json"))
-    # @subreddit_analysis.db.execute "delete from subreddits"
-    # @subreddit_analysis.db.execute "insert into subreddits (name, metadata, ended_at, after) values ('funny', '#{JSON.pretty_generate(subreddit).gsub("'", "''")}', #{submission['ended_at']}, '#{submission['after']}')"
-    # @subreddit_analysis.db.execute "delete from subreddit_submissions"
-    # @subreddit_analysis.db.execute "insert into subreddit_submissions (subreddit_name, id, ended_at, after)  values ('funny', '1324234', #{@comments['ended_at']}, '#{@comments['after']}')"
-    # @subreddit_analysis.db.execute "delete from subreddit_submitters"
-    # for submitter in submission["submitters"]
-    #   @subreddit_analysis.db.execute "insert into subreddit_submitters (subreddit_name, name)  values ('funny', #{quote(submitter)})"
-    # end
-    # @subreddit_analysis.db.execute "delete from subreddit_comments"
-    # for comment in @comments["comments"]
-    #   @subreddit_analysis.db.execute "insert into subreddit_comments (subreddit_name, submission_id, name)  values ('funny', '1324234', #{quote(comment)})"
-    # end
-    # @users = (@comments['comments'] + submission['submitters']).uniq.sort
-    # @subreddit_analysis.db.execute "delete from users"
-    # (0..@users.length/2).each do |i|
-    #   @subreddit_analysis.db.execute "insert or ignore into users (name) values ('#{@users[i]}')"
-    # end
-    #
     @client = MiniTest::Mock.new
     Redd.stubs(:it).returns(@client)
+    db_seed
+    @subreddit = Subreddit.find('funny')
   end
 
   after do
-    # @subreddit_analysis.close
+    db_drop
+    @subreddit_analysis.close
   end
 
   it "initializes properties" do
@@ -52,121 +35,88 @@ describe SubredditAnalysis do
     @subreddit_analysis.authorize
     assert(@client.verify)
   end
-#
-#   describe "read data" do
-#     describe "retrieves from data store" do
-#       before do
-#         @result = @subreddit_analysis.read('funny', 'comments', { 'id' => '1324234'})
-#       end
-#       it 'matches name' do
-#         assert_equal(@comments['name'], @result['name']);
-#       end
-#       it 'matches ended_at' do
-#         assert_equal(@comments['ended_at'], @result['ended_at']);
-#       end
-#       it 'matches name' do
-#         assert_equal(@comments['after'], @result['after']);
-#       end
-#       it 'matches name' do
-#         assert_equal(@comments['id'], @result['id']);
-#       end
-#       it 'matches name' do
-#         assert_equal(@comments['comments'].sort, @result['comments'].sort);
-#       end
-#     end
-#
-#     it 'returns default if there is no data store file' do
-#       assert_equal({ name: 'foo'}, @subreddit_analysis.read('foo', 'comment', { name: 'foo'}))
-#     end
-#   end
-#
-#   describe "comment authors" do
-#     before do
-#       @comments = [ stub(author: "Je---ja", id: '23456')]
-#       @submission = stub(id: '1324234')
-#       @subreddit = Subreddit.new
-#       @subreddit.name = 'foo'
-#       @subreddit.reddit_object = MiniTest::Mock.new
-#     end
-#
-#     it "requests 100 comments if requested" do
-#       @subreddit.reddit_object = MiniTest::Mock.new
-#       @subreddit.reddit_object.expect(:get_comments, @comments, [{limit: 100, count: 0, after: nil}])
-#       @subreddit_analysis.comments(@subreddit, @submission, 100)
-#       assert(@subreddit.reddit_object.verify)
-#     end
-#
-#     describe "with saved data" do
-#
-#       it "uses saved data" do
-#         assert_equal(100, @subreddit_analysis.comments(@subreddit, @submission, 100)['ended_at'])
-#       end
-#
-#       it "asks for incremental content" do
-#         @subreddit.reddit_object.expect(:get_comments, @comments , [{limit: 100, count: 100, after: "12345"}])
-#         assert_equal(200, @subreddit_analysis.comments(@subreddit, @submission, 200)['ended_at'])
-#       end
-#
-#       it "de-dupes" do
-#         @subreddit.reddit_object.expect(:get_comments, @comments , [{limit: 100, count: 100, after: "12345"}])
-#         assert_equal(86, @subreddit_analysis.comments(@subreddit, @submission, 200)['comments'].length)
-#       end
-#
-#       it "saves last count" do
-#         @subreddit.reddit_object.expect(:get_comments, @comments , [{limit: 50, count: 100, after: "12345"}])
-#         assert_equal(150, @subreddit_analysis.comments(@subreddit, @submission, 150)['ended_at'])
-#       end
-#
-#       it "slices if requested count is greater than 100" do
-#         @subreddit.reddit_object.expect(:get_comments, @comments , [{limit: 100, count: 100, after: "12345"}])
-#         @subreddit.reddit_object.expect(:get_comments, @comments , [{limit: 100, count: 200, after: "23456"}])
-#         assert_equal(300, @subreddit_analysis.comments(@subreddit, @submission, 300)['ended_at'])
-#       end
-#
-#     end
-#   end
-#
-#   describe "subreddit submissions" do
-#     before do
-#       @submissions = [ stub(author: "Je---ja", id: '23456', get_new: [])]
-#       @subreddit = stub(name: 'foo', reddit_object: stub())
-#       @subreddit_analysis.stubs(comments: nil) #save: nil,
-#     end
-#
-#     it "requests 100 submissions if requested" do
-#       @subreddit.reddit_object.expect(:get_new, @submissions, [{limit: 100, count: 0, after: nil}])
-#       @subreddit_analysis.submissions(@subreddit, 100)
-#       assert(@subreddit.verify)
-#     end
-#
-#     describe "with saved data" do
-#
-#       it "uses saved data" do
-#         assert_equal(100, @subreddit_analysis.submissions(@subreddit, 100)['ended_at'])
-#       end
-#
-#       it "asks for incremental content" do
-#         @subreddit.reddit_object.expect(:get_new, @submissions , [{limit: 100, count: 100, after: "54wmuj"}])
-#         assert_equal(200, @subreddit_analysis.submissions(@subreddit, 200)['ended_at'])
-#       end
-#
-#       it "de-dupes" do
-#         @subreddit.reddit_object.expect(:get_new, @submissions , [{limit: 100, count: 100, after: "54wmuj"}])
-#         assert_equal(6, @subreddit_analysis.submissions(@subreddit, 200)['submitters'].length)
-#       end
-#
-#       it "saves last count" do
-#         @subreddit.reddit_object.expect(:get_new, @submissions , [{limit: 50, count: 100, after: "54wmuj"}])
-#         assert_equal(150, @subreddit_analysis.submissions(@subreddit, 150)['ended_at'])
-#       end
-#
-#       it "slices if requested count is greater than 100" do
-#         @subreddit.reddit_object.expect(:get_new, @submissions , [{limit: 100, count: 100, after: "54wmuj"}])
-#         @subreddit.reddit_object.expect(:get_new, @submissions , [{limit: 100, count: 200, after: "23456"}])
-#         assert_equal(300, @subreddit_analysis.submissions(@subreddit, 300)['ended_at'])
-#       end
-#
-#     end
-#
-#   end
+
+  describe "crawl_subreddit_submissions" do
+    before do
+      @client.expect(:authorize, nil)
+      reddit_object = MiniTest::Mock.new
+      @subreddit.reddit_object.expect(:nil?, false)
+      @subreddit.reddit_object.expect(:nil?, false)
+      @subreddit.reddit_object.expect(:nil?, false)
+      @subreddit.reddit_object = reddit_object
+    end
+    it "gets does not request new submissions when there are already enough in the db" do
+      @subreddit_analysis.crawl_subreddit_submissions(@subreddit, 1)
+      assert(@subreddit.reddit_object.verify)
+    end
+    it "gets additional new submissions up to limit" do
+      @subreddit.reddit_object.expect(:get_new, [], [{:limit => 8, :count => 2, :after => 't3_55owj3'}])
+      @subreddit_analysis.crawl_subreddit_submissions(@subreddit, 10)
+      assert(@subreddit.reddit_object.verify)
+    end
+  end
+
+  def db_drop
+    Subreddit.destroy_table
+    SubredditSubmission.destroy_table
+    SubredditComment.destroy_table
+    User.destroy_table
+    UserComment.destroy_table
+    UserSubmission.destroy_table
+  end
+
+  def db_seed
+    json = File.read(File.join(__dir__, '..', 'spec', 'fixtures', 'funny_subreddit.json'))
+    CSV.foreach(File.join(__dir__, '..', 'spec', 'fixtures', 'subreddit.csv'), { col_sep: '|' }) do |row|
+      Subreddit.new({
+        name: row[0],
+        ended_at: row[1],
+        after: row[2],
+        metadata: json.gsub("'", "''")
+        }).save
+    end
+    CSV.foreach(File.join(__dir__, '..', 'spec', 'fixtures', 'subreddit_submission.csv'), { col_sep: '|' }) do |row|
+      SubredditSubmission.new({
+        subreddit: stub(name: row[0]),
+        name: row[1],
+        id: row[2],
+        user_name: row[3],
+        ended_at: row[4],
+        after: row[5]
+        }).save
+    end
+    CSV.foreach(File.join(__dir__, '..', 'spec', 'fixtures', 'subreddit_comment.csv'), { col_sep: '|' }) do |row|
+      SubredditComment.new({
+        subreddit: stub(name: row[0]),
+        submission: stub(name: row[1], comments: []),
+        name: row[2],
+        id: row[3],
+        user_name: row[4]
+        }).save
+    end
+    CSV.foreach(File.join(__dir__, '..', 'spec', 'fixtures', 'user.csv'), { col_sep: '|' }) do |row|
+      User.new({
+        name: row[0],
+        metadata: "{ 'foo': 'bar' }",
+        submissions_ended_at: row[2],
+        submissions_after: row[3],
+        comments_ended_at: row[4],
+        comments_after: row[5]
+        }).save
+    end
+    CSV.foreach(File.join(__dir__, '..', 'spec', 'fixtures', 'user_submission.csv'), { col_sep: '|' }) do |row|
+      User.new({
+        user_name: row[0],
+        subreddit_name: row[1],
+        }).save
+    end
+    CSV.foreach(File.join(__dir__, '..', 'spec', 'fixtures', 'user_comment.csv'), { col_sep: '|' }) do |row|
+      User.new({
+        user_name: row[0],
+        subreddit_name: row[1],
+        }).save
+    end
+
+  end
+
 end
