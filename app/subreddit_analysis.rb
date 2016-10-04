@@ -52,10 +52,19 @@ class SubredditAnalysis
     limit = total_limit - count  > 100 ? 100 : total_limit - count
     if (limit > 0)
       (count..total_limit-1).each_slice(limit) do |a|
-        log("retrieve #{limit} Submissions for Subreddit #{subreddit.name} starting at #{a.first}")
-        subreddit.get_submissions(limit, a.first)
-        log("saving #{subreddit.submissions.length}...")
-        subreddit.save
+        begin
+          log("retrieve #{limit} Submissions for Subreddit #{subreddit.name} starting at #{a.first}")
+          subreddit.get_submissions(limit, a.first)
+          log("saving #{subreddit.submissions.length}...")
+          subreddit.save
+        rescue Redd::Error::RateLimited => error
+          log("saving #{subreddit.submissions.length}...")
+          sleep(error.time)
+          retry
+        rescue Redd::Error => error
+          raise error unless (400...600).include?(error.code)
+          log("ERROR #{error} skipping.")
+        end
       end
     else
       log("Already at Subreddit #{subreddit.name} #{subreddit.ended_at}. Skip.")
@@ -70,10 +79,19 @@ class SubredditAnalysis
       limit = total_limit - count  > 100 ? 100 : total_limit - count
       if (limit > 0)
         (count..total_limit-1).each_slice(limit) do |a|
-          log("retrieve #{limit} for Comments for Submission #{submission.name} for Subreddit #{submission.subreddit.name} starting at #{a.first}")
-          submission.get_comments(limit, a.first)
-          log("saving #{submission.comments.length}...")
-          submission.save
+          begin
+            log("retrieve #{limit} for Comments for Submission #{submission.name} for Subreddit #{submission.subreddit.name} starting at #{a.first}")
+            submission.get_comments(limit, a.first)
+            log("saving #{submission.comments.length}...")
+            submission.save
+          rescue Redd::Error::RateLimited => error
+            log("saving #{subreddit.submissions.length}...")
+            sleep(error.time)
+            retry
+          rescue Redd::Error => error
+            raise error unless (400...600).include?(error.code)
+            log("ERROR #{error} skipping.")
+          end
         end
       else
         log("Already at Submission #{submission.name} #{submission.ended_at}. Skip.")
@@ -100,13 +118,22 @@ class SubredditAnalysis
       limit = total_limit - count  > 100 ? 100 : total_limit - count
       if (limit > 0) then
         (count..total_limit-1).each_slice(limit) do |a|
-          log("retrieve #{limit} #{klass.name} for user #{user.name} starting at #{a.first}")
-          if (klass == UserSubmission)
-            user.get_submissions(limit, a.first)
-          else
-            user.get_comments(limit, a.first)
+          begin
+            log("retrieve #{limit} #{klass.name} for user #{user.name} starting at #{a.first}")
+            if (klass == UserSubmission)
+              user.get_submissions(limit, a.first)
+            else
+              user.get_comments(limit, a.first)
+            end
+            user.save
+          rescue Redd::Error::RateLimited => error
+            log("saving #{subreddit.submissions.length}...")
+            sleep(error.time)
+            retry
+          rescue Redd::Error => error
+            raise error unless (400...600).include?(error.code)
+            log("ERROR #{error} skipping.")
           end
-          user.save
         end
       else
         log("Already at #{count} for #{klass.name}s for user #{user.name}. Skip.")
