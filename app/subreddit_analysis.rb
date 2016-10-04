@@ -160,7 +160,7 @@ class SubredditAnalysis
         log("Going to sleep after error. Try again...(attempt #{retries} of 3)")
         sleep(900)
         log("Waking up! Try again...(attempt #{retries} of 3)")
-        SubredditAnalysis.run(subreddit, retries)
+        SubredditAnalysis.run(name, retries)
       else
         log("Failed after #{retries} retries.")
       end
