@@ -156,10 +156,10 @@ class SubredditAnalysis
     rescue Exception => e
       bot.close if bot
       log(e)
-      if ((retries += 1) <= 2) then
-        log("Going to sleep after error. Try again...(attempt #{retries} of 3)")
-        sleep(900)
-        log("Waking up! Try again...(attempt #{retries} of 3)")
+      if ((retries += 1) <= 9) then
+        log("Going to sleep after error. Try again...(attempt #{retries} of 10)")
+        sleep(1800)
+        log("Waking up! Try again...(attempt #{retries} of 10)")
         SubredditAnalysis.run(name, retries)
       else
         log("Failed after #{retries} retries.")
