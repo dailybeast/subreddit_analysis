@@ -102,9 +102,18 @@ class SubredditAnalysis
   def crawl_users(subreddit)
     users = subreddit.unique_submitters_and_commenters
     for name in users do
-      user = User.find_or_create(name)
-      crawl_user(user, UserSubmission)
-      crawl_user(user, UserComment)
+      begin
+        user = User.find_or_create(name)
+        crawl_user(user, UserSubmission)
+        crawl_user(user, UserComment)
+      rescue Redd::Error::RateLimited => error
+        log("saving #{subreddit.submissions.length}...")
+        sleep(error.time)
+        retry
+      rescue Redd::Error => error
+        raise error unless (400...600).include?(error.code)
+        log("ERROR #{error} skipping.")
+      end
     end
   end
 
