@@ -194,7 +194,7 @@ class SubredditAnalysis
       log(e)
       if ((retries += 1) <= 9) then
         log("Going to sleep after error. Try again...(attempt #{retries} of 10)")
-        sleep(1800)
+        sleep(7200)
         log("Waking up! Try again...(attempt #{retries} of 10)")
         SubredditAnalysis.run(name, retries)
       else
