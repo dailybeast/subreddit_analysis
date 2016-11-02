@@ -62,7 +62,7 @@ class SubredditAnalysis
           sleep(error.time)
           retry
         rescue Redd::Error => error
-          raise error unless (400...600).include?(error.code)
+          raise error unless (403...600).include?(error.code)
           log("ERROR #{error} skipping.")
         end
       end
@@ -89,7 +89,7 @@ class SubredditAnalysis
             sleep(error.time)
             retry
           rescue Redd::Error => error
-            raise error unless (400...600).include?(error.code)
+            raise error unless (403..600).include?(error.code)
             log("ERROR #{error} skipping.")
           end
         end
@@ -111,7 +111,7 @@ class SubredditAnalysis
         sleep(error.time)
         retry
       rescue Redd::Error => error
-        raise error unless (400...600).include?(error.code)
+        raise error unless (403..600).include?(error.code)
         log("ERROR #{error} skipping.")
       end
     end
@@ -140,7 +140,7 @@ class SubredditAnalysis
             sleep(error.time)
             retry
           rescue Redd::Error => error
-            raise error unless (400...600).include?(error.code)
+            raise error unless (403..600).include?(error.code)
             log("ERROR #{error} skipping.")
           end
         end
