@@ -106,9 +106,14 @@ class SubredditAnalysis
     users = subreddit.unique_submitters_and_commenters
     for name in users do
       begin
-        user = User.find_or_create(name)
-        crawl_user(user, UserSubmission)
-        crawl_user(user, UserComment)
+        user = User.find(name)
+        if (user.nil?)
+          user = User.create(name)
+          crawl_user(user, UserSubmission)
+          crawl_user(user, UserComment)
+        else
+          #TODO to see if we need to crawl it
+        end
       rescue Redd::Error::RateLimited => error
         log("saving #{subreddit.submissions.length}...")
         sleep(error.time)
