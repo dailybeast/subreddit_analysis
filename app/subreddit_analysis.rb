@@ -113,6 +113,7 @@ class SubredditAnalysis
           crawl_user(user, UserComment)
         else
           #TODO to see if we need to crawl it
+          log("User #{name} exists - skip")
         end
       rescue Redd::Error::RateLimited => error
         log("saving #{subreddit.submissions.length}...")
