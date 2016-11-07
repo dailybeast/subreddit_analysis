@@ -91,6 +91,9 @@ class SubredditAnalysis
           rescue Redd::Error => error
             raise error unless (403..600).include?(error.code)
             log("ERROR #{error} skipping.")
+          rescue StandardError => error
+            log("StandardError #{error} continuing")
+            next
           end
         end
       else
@@ -192,9 +195,9 @@ class SubredditAnalysis
     rescue Exception => e
       bot.close if bot
       log(e)
-      if ((retries += 1) <= 9) then
-        log("Going to sleep after error. Try again...(attempt #{retries} of 10)")
-        sleep(7200)
+      if ((retries += 1) <= 99) then
+        log("Going to sleep after error. Try again...(attempt #{retries} of 100)")
+        sleep(1800)
         log("Waking up! Try again...(attempt #{retries} of 10)")
         SubredditAnalysis.run(name, retries)
       else
