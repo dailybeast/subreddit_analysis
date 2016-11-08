@@ -40,11 +40,11 @@ describe SubredditAnalysis do
     before do
       @client.expect(:authorize, nil)
       reddit_object = MiniTest::Mock.new
-      @subreddit.reddit_object.expect(:nil?, false)
-      @subreddit.reddit_object.expect(:nil?, false)
-      @subreddit.reddit_object.expect(:nil?, false)
+      reddit_object.expect(:nil?, false)
+      reddit_object.expect(:nil?, false)
+      reddit_object.expect(:nil?, false)
       @subreddit.reddit_object = reddit_object
-    end
+      end
     it "gets does not request new submissions when there are already enough in the db" do
       @subreddit_analysis.crawl_subreddit_submissions(@subreddit, 1)
       assert(@subreddit.reddit_object.verify)
