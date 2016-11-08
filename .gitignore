@@ -40,3 +40,4 @@ build/
 
 config/config.yml
 /data/
+/reports/
