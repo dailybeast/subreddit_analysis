@@ -4,7 +4,7 @@
 
 ###Requirements
 ------------
-* Python 2.3.1
+* Ruby 2.3.1
 * [redd](https://github.com/avinashbot/redd)
 * Sqlite3
 
@@ -19,7 +19,7 @@
 
 ###Run The Bot
   `./bin/run_subreddit_analysis [subreddit_name e.g. askreddit]`
-  
+
 ###Configuration Options
 * user_agent: [should be descriptive and reference your user name]
 * data_folder: [where to put the sqlite db file]
@@ -32,11 +32,11 @@
 
 ###Results
 * Are dropped into a csv file in a reports folder titled by date and subreddit
-* File has a simple count of the number of different submitters and 
+* File has a simple count of the number of different submitters and
   commenters of the selected subreddit also submitted or commented into another subreddit
-  
+
 |count|subreddit
---- | --- 
+--- | ---
 AskReddit|12711
 funny|6543
 pics|6089
